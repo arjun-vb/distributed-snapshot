@@ -15,6 +15,11 @@ outgoing = []
 incoming = []
 currentBalance = 10
 
+
+
+snapBalance = 0
+clientStates = []
+
 class Connections(Thread):
 	def __init__(self,connection):
 		Thread.__init__(self)
@@ -25,7 +30,24 @@ class Connections(Thread):
 			response = self.connection.recv(buff_size)
 			data = pickle.loads(response)
 
+			if(data.reqType == "TRANSACTION"):
+				currentBalance += data.amount
+				print("Updated Balance is " + currentBalance)
+			elif(data.reqType == ""):
 
+
+
+class MarkerThread(Thread):
+	def __init__(self):
+		Thread.__init__(self)
+		self.connection = connection
+
+	def run(self):
+		while True:
+			if()
+
+def sleep():
+	time.sleep(3)
 
 def main():
 	ip = '127.0.0.1'
@@ -198,12 +220,26 @@ def main():
 
 
 	while True:
-		transactionFlag = False
 		print("=======================================================")
 		print("| For Balance type 'BAL'                              |")
 		print("| For transferring money - RECV_ID AMOUNT Eg.(2 5)    |")
+		print("| For Snapshot type 'SNAP'                            |")
 		print("=======================================================")
 		user_input = raw_input()
+		if (user_input == "BAL"):
+			print("Balance is " + currentBalance)
+		elif (user_input == "SNAP"):
+			print("Initiating snapshot")
+		else:
+			reciever, amount = user_input.split()
+			if(amount < currentBalance):
+				print("Insufficient Balance")
+			else:
+				currentBalance -= amount
+				message = Messages("TRANSACTION", pid, "", amount)
+				sleep()
+				c2c_connections[reciever].send(pickle.dumps(message))
+
 
 	closeSockets()
 
