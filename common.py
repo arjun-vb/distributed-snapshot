@@ -6,8 +6,10 @@ class Messages:
 		self.amount = amount
 
 class State:
-	def __init__(self, reqType, localState, channelState):
+	def __init__(self, reqType, fromClient, markerId, localState, channelState):
 		self.reqType = reqType
+		self.fromClient = fromClient
+		self.markerId = markerId
 		self.localState = localState
 		self.channelState = channelState
 
@@ -15,6 +17,8 @@ class TrackChannels:
 
 	def __init__(self, markerId):
 		self.markerId = markerId
+
+		self.snapbalance = 0
 		
 		self.listenToChannel = {}
 		self.listenToChannel[1] = False
@@ -29,3 +33,6 @@ class TrackChannels:
 		self.channelMessages[4] = []
 
 		self.recievedMarkers = []
+
+		self.snapshotCount = 0
+		self.recievedSnaps = {}
