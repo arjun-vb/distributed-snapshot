@@ -31,7 +31,7 @@ count = 0
 
 recievedSnapshotCount = 0
 
-markersInProgres = {}
+markersInProgress = {}
 
 snapBalance = {}
 
@@ -48,22 +48,28 @@ class Connections(Thread):
 
 			if(data.reqType == "TRANSACTION"):
 				print("Recieved transaction message")
-				for markerId in markersInProgres:
-					if(markersInProgres[markerId].listenToChannel[data.fromClient] == True):
-						markersInProgres[markerId].channelMessages[data.fromClient].append(data)
+				for markerId in markersInProgress:
+					if(markersInProgress[markerId].listenToChannel[data.fromClient] == True):
+						markersInProgress[markerId].channelMessages[data.fromClient].append(data)
 
 				currentBalance += data.amount
 				print("Updated Balance is " + currentBalance)
 			elif(data.reqType == "MARKER"):
-				print("Recieved Marker message")
-				if(data.markerId in markersInProgres):
-					if(markersInProgres[data.markerId].listenToChannel[data.fromClient] == True):
-						markersInProgres[data.markerId].listenToChannel[data.fromClient] = False
-						markersInProgres[data.markerId].recievedMarkers.append(data.fromClient)
-						if(markersInProgres[data.markerId].recievedMarkers == incoming):
+				print("Recieved Marker message from " + str(data.fromClient))
+				if(data.markerId in markersInProgress):
+					if(markersInProgress[data.markerId].listenToChannel[data.fromClient] == True):
+						markersInProgress[data.markerId].listenToChannel[data.fromClient] = False
+						markersInProgress[data.markerId].recievedMarkers.append(data.fromClient)
+						print("Recieved markers: ")
+						for i in markersInProgress[data.markerId].recievedMarkers:
+							print(i)
+
+						initiator = int(data.markerId.split("|")[0])
+						if(markersInProgress[data.markerId].recievedMarkers == incoming and initiator != pid):
+							print("Sending snap to " + str(initiator))
 							locState = State("SNAP", snapBalance[data.markerId], 
-								markersInProgres[data.markerId].channelMessages)
-							initiator = int(locState.split("|")[0])
+								markersInProgress[data.markerId].channelMessages)
+							initiator = int(data.markerId.split("|")[0])
 							c2c_connections[initiator].send(pickle.dumps(locState))
 				else:
 					sendMarkers(data.markerId, data.fromClient)
@@ -84,7 +90,7 @@ class MarkerThread(Thread):
 		
 		for i in outgoing:
 			message = Messages("MARKER", pid, self.markerId)
-			print(i)
+			print("Sending marker to "+ str(i))
 			c2c_connections[i].send(pickle.dumps(message))
 
 
@@ -98,12 +104,13 @@ def sendMarkers(markerId, fromClient):
 
 	trackChannels = TrackChannels(markerId)
 
-	markersInProgres[markerId] = trackChannels
+	markersInProgress[markerId] = trackChannels
 
 	for i in incoming:
-		#if(i != fromClient):
-		trackChannels.listenToChannel[i] = True
-
+		if(i != fromClient):
+			trackChannels.listenToChannel[i] = True
+		else:
+			markersInProgress[markerId].recievedMarkers.append(fromClient)
 
 def incrementMarker():
 	global count
@@ -139,9 +146,9 @@ def main():
 		while i <= 4:
 			connection, client_address = client2client.accept()
 			print('Connected to: ' + client_address[0] + ':' + str(client_address[1]))
-			new_client= Connections(connection)
+			new_client = Connections(connection)
 			new_client.start()
-			c2c_connections[i] = new_client
+			c2c_connections[i] = connection
 			i+=1
 		incoming.append(2)
 		incoming.append(4)
@@ -174,7 +181,7 @@ def main():
 			print('Connected to: ' + client_address[0] + ':' + str(client_address[1]))
 			new_client= Connections(connection)
 			new_client.start()
-			c2c_connections[i] = new_client
+			c2c_connections[i] = connection
 			i+=1
 
 		incoming.append(1)
@@ -225,7 +232,7 @@ def main():
 			print('Connected to: ' + client_address[0] + ':' + str(client_address[1]))
 			new_client= Connections(connection)
 			new_client.start()
-			c2c_connections[i] = new_client
+			c2c_connections[i] = connection
 			i+=1
 		incoming.append(4)
 		outgoing.append(2)
