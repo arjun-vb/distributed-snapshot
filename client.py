@@ -1,8 +1,6 @@
 import sys
 import socket
 import pickle
-import heapq
-import hashlib
 import time
 
 from threading import Thread
@@ -82,6 +80,7 @@ class Connections(Thread):
 		print("Initiator: "+ str(initiator)+ " PID: " + str(pid))
 		#print(markersInProgress[data.markerId].recievedMarkers == incoming)
 		#print(initiator != pid)
+		markersInProgress[data.markerId].recievedMarkers.sort()
 		if markersInProgress[data.markerId].recievedMarkers == incoming and initiator != pid:
 			print("Sending snap to " + str(initiator))
 			channelState = {}
