@@ -16,24 +16,14 @@ incoming = []
 
 currentBalance = 10
 
-#clientStates = []
-#tempMessages = []
-#tempA = []
-#tempB = []
-#tempC = []
-#tempD = []
-#tempMessages.append(tempA).append(tempB).append(tempC).append(tempD)
-#recievedSnapshotCount = 0
-#snapbalance = {}
-
-count = 0
+markerCount = 0
 markersInProgress = {}
 
 myQueue = []
 myQueueLock = threading.RLock()
 balanceLock = threading.RLock()
 
-class ClientHandler(Thread):
+class MasterHandler(Thread):
 	def __init__(self):
 		Thread.__init__(self)
 
@@ -112,9 +102,9 @@ class ClientHandler(Thread):
 	def printGlobalSnap(self, markerId):
 
 		#initiator = int(markerId.split("|")[0])
-
+		print("=====================================================")
 		for j in range(1,5):
-			print("=====================================================")
+			print("-------------------------------------------------")
 			print("State of "+str(j)+": ")
 			if j == pid:
 				print("Balance of "+ str(j) +": " + str(markersInProgress[markerId].snapbalance))
@@ -129,7 +119,7 @@ class ClientHandler(Thread):
 		print("=====================================================")
 
 		
-class Connections(Thread):
+class ClientConnections(Thread):
 	def __init__(self,connection):
 		Thread.__init__(self)
 		self.connection = connection
@@ -182,9 +172,9 @@ def sendMarkers(markerId, fromClient):
 			markersInProgress[markerId].recievedMarkers.append(fromClient)
 
 def incrementMarker():
-	global count
-	count += 1
-	return str(pid) + "|" + str(count)
+	global markerCount
+	markerCount += 1
+	return str(pid) + "|" + str(markerCount)
 
 def main():
 	ip = '127.0.0.1'
@@ -216,7 +206,7 @@ def main():
 		while i <= 4:
 			connection, client_address = client2client.accept()
 			print('Connected to: ' + client_address[0] + ':' + str(client_address[1]))
-			new_client = Connections(connection)
+			new_client = ClientConnections(connection)
 			new_client.start()
 			c2c_connections[i] = connection
 			i+=1
@@ -236,7 +226,7 @@ def main():
 			print(str(e))
 
 		c2c_connections[1] = client2client
-		new_connection = Connections(client2client)
+		new_connection = ClientConnections(client2client)
 		new_connection.start()
 
 		client2client = socket.socket()
@@ -249,7 +239,7 @@ def main():
 		while i <= 4:
 			connection, client_address = client2client.accept()
 			print('Connected to: ' + client_address[0] + ':' + str(client_address[1]))
-			new_client= Connections(connection)
+			new_client= ClientConnections(connection)
 			new_client.start()
 			c2c_connections[i] = connection
 			i+=1
@@ -273,7 +263,7 @@ def main():
 			print(str(e))
 
 		c2c_connections[1] = client2client
-		new_connection = Connections(client2client)
+		new_connection = ClientConnections(client2client)
 		new_connection.start()
 
 		client2client = socket.socket()
@@ -287,7 +277,7 @@ def main():
 			print(str(e))
 
 		c2c_connections[2] = client2client
-		new_connection = Connections(client2client)
+		new_connection = ClientConnections(client2client)
 		new_connection.start()
 
 		client2client = socket.socket()
@@ -300,7 +290,7 @@ def main():
 		while i <= 4:
 			connection, client_address = client2client.accept()
 			print('Connected to: ' + client_address[0] + ':' + str(client_address[1]))
-			new_client= Connections(connection)
+			new_client= ClientConnections(connection)
 			new_client.start()
 			c2c_connections[i] = connection
 			i+=1
@@ -320,7 +310,7 @@ def main():
 			print(str(e))
 
 		c2c_connections[1] = client2client
-		new_connection = Connections(client2client)
+		new_connection = ClientConnections(client2client)
 		new_connection.start()
 
 		client2client = socket.socket()
@@ -334,7 +324,7 @@ def main():
 			print(str(e))
 
 		c2c_connections[2] = client2client
-		new_connection = Connections(client2client)
+		new_connection = ClientConnections(client2client)
 		new_connection.start()
 
 		client2client = socket.socket()
@@ -348,7 +338,7 @@ def main():
 			print(str(e))
 
 		c2c_connections[3] = client2client
-		new_connection = Connections(client2client)
+		new_connection = ClientConnections(client2client)
 		new_connection.start()
 
 		incoming.append(2)
@@ -359,9 +349,9 @@ def main():
 	incoming.sort()
 	outgoing.sort()
 
-	clientHandler = ClientHandler()
+	masterHandler = MasterHandler()
 
-	clientHandler.start()
+	masterHandler.start()
 	
 	while True:
 		print("=======================================================")
