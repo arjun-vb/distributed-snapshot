@@ -152,7 +152,7 @@ class MarkerThread(Thread):
 
 
 def sleep():
-	time.sleep(1)
+	time.sleep(3)
 
 def sendMarkers(markerId, fromClient):
 	print("Marker ID is "  + str(markerId))
@@ -368,15 +368,19 @@ def main():
 			sendMarkers(markerId, pid)
 		else:
 			reciever, amount = user_input.split()
-			if int(amount) > currentBalance:
-				print("Insufficient Balance")
+			if int(reciever) in outgoing:
+				if int(amount) > currentBalance:
+					print("Insufficient Balance")
+				else:
+					balanceLock.acquire()
+					currentBalance -= int(amount)
+					balanceLock.release()
+					message = Messages("TRANSACTION", pid, "", amount)
+					sleep()
+					c2c_connections[int(reciever)].send(pickle.dumps(message))
+					print("Updated Balance of " + str(pid)  + " is " + str(currentBalance))
 			else:
-				balanceLock.acquire()
-				currentBalance -= int(amount)
-				balanceLock.release()
-				message = Messages("TRANSACTION", pid, "", amount)
-				sleep()
-				c2c_connections[int(reciever)].send(pickle.dumps(message))
+				print("Client " + str(reciever) + " is not connected")
 
 
 if __name__ == "__main__":
