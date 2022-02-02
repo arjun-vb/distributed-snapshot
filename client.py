@@ -2,7 +2,7 @@ import sys
 import socket
 import pickle
 import time
-
+import threading
 from threading import Thread
 from common import *
 
@@ -29,40 +29,45 @@ currentBalance = 10
 count = 0
 markersInProgress = {}
 
-class Connections(Thread):
-	def __init__(self,connection):
+myQueue = []
+myQueueLock = threading.RLock()
+balanceLock = threading.RLock()
+
+class ClientHandler(Thread):
+	def __init__(self):
 		Thread.__init__(self)
-		self.connection = connection
 
 	def run(self):
 		global currentBalance
 		while True:
-			response = self.connection.recv(buff_size)
-			data = pickle.loads(response)
-
-			if data.reqType == "TRANSACTION":
-				print("Recieved transaction message")
-				for markerId in markersInProgress:
-					if(markersInProgress[markerId].listenToChannel[data.fromClient] == True):
-						markersInProgress[markerId].channelMessages[data.fromClient].append(data.amount)
-
-				currentBalance += int(data.amount)
-				print("Updated Balance is " + str(currentBalance))
-			elif data.reqType == "MARKER":
-				print("Recieved Marker message from " + str(data.fromClient))
-				if data.markerId in markersInProgress:
-					if markersInProgress[data.markerId].listenToChannel[data.fromClient] == True:
-						markersInProgress[data.markerId].listenToChannel[data.fromClient] = False
-						print(" Appending recieved markers : " + str(data.fromClient))
-						markersInProgress[data.markerId].recievedMarkers.append(data.fromClient)
+			if len(myQueue) != 0:
+				myQueueLock.acquire()
+				data = myQueue.pop(0)
+				myQueueLock.release()
+				if data.reqType == "TRANSACTION":
+					print("Recieved transaction message")
+					for markerId in markersInProgress:
+						if(markersInProgress[markerId].listenToChannel[data.fromClient] == True):
+							markersInProgress[markerId].channelMessages[data.fromClient].append(data.amount)
+					balanceLock.acquire()
+					currentBalance += int(data.amount)
+					balanceLock.release()
+					print("Updated Balance is " + str(currentBalance))
+				elif data.reqType == "MARKER":
+					print("Recieved Marker message from " + str(data.fromClient))
+					if data.markerId in markersInProgress:
+						if markersInProgress[data.markerId].listenToChannel[data.fromClient] == True:
+							markersInProgress[data.markerId].listenToChannel[data.fromClient] = False
+							print(" Appending recieved markers : " + str(data.fromClient))
+							markersInProgress[data.markerId].recievedMarkers.append(data.fromClient)
+							self.handleRecievedMarkers(data)
+					else:
+						sendMarkers(data.markerId, data.fromClient)
 						self.handleRecievedMarkers(data)
-				else:
-					sendMarkers(data.markerId, data.fromClient)
-					self.handleRecievedMarkers(data)
 
-			elif data.reqType == "SNAP":
-				print("Recieved snap from " + str(data.fromClient))
-				self.handleLocalSnaps(data)
+				elif data.reqType == "SNAP":
+					print("Recieved snap from " + str(data.fromClient))
+					self.handleLocalSnaps(data)
 
 	def handleRecievedMarkers(self, data):
 		global temp
@@ -80,7 +85,7 @@ class Connections(Thread):
 		print("Initiator: "+ str(initiator)+ " PID: " + str(pid))
 		#print(markersInProgress[data.markerId].recievedMarkers == incoming)
 		#print(initiator != pid)
-		markersInProgress[data.markerId].recievedMarkers.sort()
+		#markersInProgress[data.markerId].recievedMarkers.sort()
 		if markersInProgress[data.markerId].recievedMarkers == incoming and initiator != pid:
 			print("Sending snap to " + str(initiator))
 			channelState = {}
@@ -88,6 +93,7 @@ class Connections(Thread):
 				channelState[i] = markersInProgress[data.markerId].channelMessages[i]
 			locState = State("SNAP", pid, data.markerId, markersInProgress[data.markerId].snapbalance, 
 				channelState)
+			sleep()
 			c2c_connections[initiator].send(pickle.dumps(locState))
 			#markersInProgress.pop(data.markerId)
 		elif markersInProgress[data.markerId].recievedMarkers == incoming and initiator == pid and markersInProgress[data.markerId].snapshotCount == 3:
@@ -104,54 +110,38 @@ class Connections(Thread):
 			#markersInProgress.pop(data.markerId)
 
 	def printGlobalSnap(self, markerId):
-		initiator = int(markerId.split("|")[0])
-		print("State of A:")		
-		if initiator == 1:
-			print("Balance of A: " + str(markersInProgress[markerId].snapbalance))
-			print("Channel states: ")
-			for i in incoming:
-				print(str(i) + " : " + str(markersInProgress[markerId].channelMessages[i]))
-		else:
-			print("Balance of A: " + str(markersInProgress[markerId].recievedSnaps[1].localState))
-			print("Channel states: ")
-			for i in markersInProgress[markerId].recievedSnaps[1].channelState:
-				print(str(i) + " : " + str(markersInProgress[markerId].recievedSnaps[1].channelState[i]))
+
+		#initiator = int(markerId.split("|")[0])
+
+		for j in range(1,5):
+			print("=====================================================")
+			print("State of "+str(j)+": ")
+			if j == pid:
+				print("Balance of "+ str(j) +": " + str(markersInProgress[markerId].snapbalance))
+				print("Channel states: ")
+				for i in incoming:
+					print(str(i) + " : " + str(markersInProgress[markerId].channelMessages[i]))
+			else:
+				print("Balance of "+ str(j) +": " + str(markersInProgress[markerId].recievedSnaps[j].localState))
+				print("Channel states: ")
+				for i in markersInProgress[markerId].recievedSnaps[j].channelState:
+					print(str(i) + " : " + str(markersInProgress[markerId].recievedSnaps[j].channelState[i]))
+		print("=====================================================")
+
 		
-		print("State of B:")
-		if initiator == 2:
-			print("Balance of B: " + str(markersInProgress[markerId].snapbalance))
-			print("Channel states: ")
-			for i in incoming:
-				print(str(i) + " : " + str(markersInProgress[markerId].channelMessages[i]))
-		else:
-			print("Balance of B: " + str(markersInProgress[markerId].recievedSnaps[2].localState))
-			print("Channel states: ")
-			for i in markersInProgress[markerId].recievedSnaps[2].channelState:
-				print(str(i) + " : " + str(markersInProgress[markerId].recievedSnaps[2].channelState[i]))
+class Connections(Thread):
+	def __init__(self,connection):
+		Thread.__init__(self)
+		self.connection = connection
+
+	def run(self):
 		
-		print("State of C:")
-		if initiator == 3:
-			print("Balance of C: " + str(markersInProgress[markerId].snapbalance))
-			print("Channel states: ")
-			for i in incoming:
-				print(str(i) + " : " + str(markersInProgress[markerId].channelMessages[i]))
-		else:
-			print("Balance of C: " + str(markersInProgress[markerId].recievedSnaps[3].localState))
-			print("Channel states: ")
-			for i in markersInProgress[markerId].recievedSnaps[3].channelState:
-				print(str(i) + " : " + str(markersInProgress[markerId].recievedSnaps[3].channelState[i]))
-		
-		print("State of D:")
-		if initiator == 4:
-			print("Balance of D: " + str(markersInProgress[markerId].snapbalance))
-			print("Channel states: ")
-			for i in incoming:
-				print(str(i) + " : " + str(markersInProgress[markerId].channelMessages[i]))
-		else:
-			print("Balance of D: " + str(markersInProgress[markerId].recievedSnaps[4].localState))
-			print("Channel states: ")
-			for i in markersInProgress[markerId].recievedSnaps[4].channelState:
-				print(str(i) + " : " + str(markersInProgress[markerId].recievedSnaps[4].channelState[i]))
+		while True:
+			response = self.connection.recv(buff_size)
+			data = pickle.loads(response)
+			myQueueLock.acquire()
+			myQueue.append(data)
+			myQueueLock.release()
 
 
 class MarkerThread(Thread):
@@ -161,9 +151,8 @@ class MarkerThread(Thread):
 
 	def run(self):
 		global currentBalance
-
+		
 		sleep()
-		markersInProgress[self.markerId].snapbalance = currentBalance
 		#snapbalance[self.markerId] = currentBalance
 		
 		for i in outgoing:
@@ -176,11 +165,13 @@ def sleep():
 	time.sleep(1)
 
 def sendMarkers(markerId, fromClient):
-	
+	print("Marker ID is "  + str(markerId))
+
 	trackChannels = TrackChannels(markerId)
 
 	markersInProgress[markerId] = trackChannels
-	print("Marker ID is "  + str(markerId))
+	markersInProgress[markerId].snapbalance = currentBalance
+	
 	markerThread = MarkerThread(markerId)
 	markerThread.start()
 
@@ -368,6 +359,10 @@ def main():
 	incoming.sort()
 	outgoing.sort()
 
+	clientHandler = ClientHandler()
+
+	clientHandler.start()
+	
 	while True:
 		print("=======================================================")
 		print("| For Balance type 'BAL'                              |")
@@ -386,13 +381,13 @@ def main():
 			if int(amount) > currentBalance:
 				print("Insufficient Balance")
 			else:
+				balanceLock.acquire()
 				currentBalance -= int(amount)
+				balanceLock.release()
 				message = Messages("TRANSACTION", pid, "", amount)
 				sleep()
 				c2c_connections[int(reciever)].send(pickle.dumps(message))
 
-
-	closeSockets()
 
 if __name__ == "__main__":
     main()
