@@ -8,7 +8,6 @@ from common import *
 
 buff_size = 1024
 pid = 0
-temp = 0
 
 c2c_connections = {}
 outgoing = []
@@ -35,20 +34,22 @@ class MasterHandler(Thread):
 				data = myQueue.pop(0)
 				myQueueLock.release()
 				if data.reqType == "TRANSACTION":
-					print("Recieved transaction message")
+					print("=====================================================")
+					print("Recieved $"+str(data.amount)+" from " + str(data.fromClient))
 					for markerId in markersInProgress:
 						if(markersInProgress[markerId].listenToChannel[data.fromClient] == True):
 							markersInProgress[markerId].channelMessages[data.fromClient].append(data.amount)
 					balanceLock.acquire()
 					currentBalance += int(data.amount)
 					balanceLock.release()
-					print("Updated Balance is " + str(currentBalance))
+					print("Updated balance is $" + str(currentBalance))
+					print("=====================================================")
 				elif data.reqType == "MARKER":
-					print("Recieved Marker message from " + str(data.fromClient))
+					print("Recieved MARKER for "+ str(data.markerId) +" from " + str(data.fromClient))
 					if data.markerId in markersInProgress:
 						if markersInProgress[data.markerId].listenToChannel[data.fromClient] == True:
 							markersInProgress[data.markerId].listenToChannel[data.fromClient] = False
-							print(" Appending recieved markers : " + str(data.fromClient))
+							#print(" Appending recieved markers : " + str(data.fromClient))
 							markersInProgress[data.markerId].recievedMarkers.append(data.fromClient)
 							self.handleRecievedMarkers(data)
 					else:
@@ -56,39 +57,34 @@ class MasterHandler(Thread):
 						self.handleRecievedMarkers(data)
 
 				elif data.reqType == "SNAP":
-					print("Recieved snap from " + str(data.fromClient))
+					print("Recieved SNAPSHOT for "+ str(data.markerId) +" from " + str(data.fromClient))
 					self.handleLocalSnaps(data)
 
 	def handleRecievedMarkers(self, data):
-		global temp
-		print("Recieved markers: +"  +  str(temp))
+		print("Recieved markers for " + str(data.markerId)+":")
 		markersInProgress[data.markerId].recievedMarkers.sort()
 		for i in markersInProgress[data.markerId].recievedMarkers:
-			print(str(i) + " " + str(temp))
-		print("Incoming: + " + str(temp))
+			print(str(i))
+		print("Incoming: ")
 		for i in incoming:
 			print(i)
 
-		temp += 1
-
 		initiator = int(data.markerId.split("|")[0])
-		print("Initiator: "+ str(initiator)+ " PID: " + str(pid))
-		#print(markersInProgress[data.markerId].recievedMarkers == incoming)
-		#print(initiator != pid)
-		#markersInProgress[data.markerId].recievedMarkers.sort()
+		print("Initiator: "+ str(initiator)+ "; My PID: " + str(pid))
+
 		if markersInProgress[data.markerId].recievedMarkers == incoming and initiator != pid:
-			print("Sending snap to " + str(initiator))
 			channelState = {}
 			for i in incoming:
 				channelState[i] = markersInProgress[data.markerId].channelMessages[i]
 			locState = State("SNAP", pid, data.markerId, markersInProgress[data.markerId].snapbalance, 
 				channelState)
 			sleep()
+			print("Sending SNAPSHOT for "+ str(data.markerId) +" to " + str(initiator))
 			c2c_connections[initiator].send(pickle.dumps(locState))
-			#markersInProgress.pop(data.markerId)
+			markersInProgress.pop(data.markerId)
 		elif markersInProgress[data.markerId].recievedMarkers == incoming and initiator == pid and markersInProgress[data.markerId].snapshotCount == 3:
 			self.printGlobalSnap(data.markerId)
-			#markersInProgress.pop(data.markerId)
+			
 
 
 	def handleLocalSnaps(self, data):
@@ -97,11 +93,9 @@ class MasterHandler(Thread):
 		markersInProgress[data.markerId].recievedMarkers.sort()
 		if markersInProgress[data.markerId].snapshotCount == 3 and markersInProgress[data.markerId].recievedMarkers == incoming:
 			self.printGlobalSnap(data.markerId)
-			#markersInProgress.pop(data.markerId)
+			
 
 	def printGlobalSnap(self, markerId):
-
-		#initiator = int(markerId.split("|")[0])
 		print("=====================================================")
 		for j in range(1,5):
 			print("-------------------------------------------------")
@@ -117,8 +111,9 @@ class MasterHandler(Thread):
 				for i in markersInProgress[markerId].recievedSnaps[j].channelState:
 					print(str(i) + " : " + str(markersInProgress[markerId].recievedSnaps[j].channelState[i]))
 		print("=====================================================")
-
+		markersInProgress.pop(markerId)
 		
+
 class ClientConnections(Thread):
 	def __init__(self,connection):
 		Thread.__init__(self)
@@ -134,20 +129,18 @@ class ClientConnections(Thread):
 			myQueueLock.release()
 
 
+
 class MarkerThread(Thread):
 	def __init__(self, markerId):
 		Thread.__init__(self)
 		self.markerId = markerId
 
-	def run(self):
-		global currentBalance
-		
-		sleep()
-		#snapbalance[self.markerId] = currentBalance
+	def run(self):		
+		time.sleep(2.5)
 		
 		for i in outgoing:
 			message = Messages("MARKER", pid, self.markerId)
-			print("Sending marker to "+ str(i))
+			print("Sending MARKER for "+ str(self.markerId) +" to "+ str(i))
 			c2c_connections[i].send(pickle.dumps(message))
 
 
@@ -155,8 +148,6 @@ def sleep():
 	time.sleep(3)
 
 def sendMarkers(markerId, fromClient):
-	print("Marker ID is "  + str(markerId))
-
 	trackChannels = TrackChannels(markerId)
 
 	markersInProgress[markerId] = trackChannels
@@ -171,10 +162,12 @@ def sendMarkers(markerId, fromClient):
 		else:
 			markersInProgress[markerId].recievedMarkers.append(fromClient)
 
+
 def incrementMarker():
 	global markerCount
 	markerCount += 1
 	return str(pid) + "|" + str(markerCount)
+
 
 def main():
 	ip = '127.0.0.1'
@@ -350,7 +343,6 @@ def main():
 	outgoing.sort()
 
 	masterHandler = MasterHandler()
-
 	masterHandler.start()
 	
 	while True:
@@ -361,12 +353,12 @@ def main():
 		print("=======================================================")
 		user_input = raw_input()
 		if user_input == "BAL":
-			print("Balance is " + str(currentBalance))
+			print("Balance is $" + str(currentBalance))
 		elif user_input == "SNAP":
-			print("Initiating snapshot")
 			markerId = incrementMarker()
+			print("Initiating snapshot "+ str(markerId))
 			sendMarkers(markerId, pid)
-		else:
+		elif len(user_input.split()) == 2:
 			reciever, amount = user_input.split()
 			if int(reciever) in outgoing:
 				if int(amount) > currentBalance:
@@ -377,11 +369,16 @@ def main():
 					balanceLock.release()
 					message = Messages("TRANSACTION", pid, "", amount)
 					sleep()
+					print("=====================================================")
+					print("Sending $"+str(amount)+" to "+str(reciever))
 					c2c_connections[int(reciever)].send(pickle.dumps(message))
-					print("Updated Balance of " + str(pid)  + " is " + str(currentBalance))
+					print("Updated balance is $" + str(currentBalance))
+					print("=====================================================")
 			else:
 				print("Client " + str(reciever) + " is not connected")
-
+		else:
+			print("INVALID INPUT")
+			continue
 
 if __name__ == "__main__":
     main()
