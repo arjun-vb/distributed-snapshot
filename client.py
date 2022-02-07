@@ -136,8 +136,8 @@ class MarkerThread(Thread):
 		self.markerId = markerId
 
 	def run(self):		
-		time.sleep(2.5)
-		
+		#time.sleep(2.5)
+		sleep()
 		for i in outgoing:
 			message = Messages("MARKER", pid, self.markerId)
 			print("Sending MARKER for "+ str(self.markerId) +" to "+ str(i))
